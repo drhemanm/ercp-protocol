@@ -1,0 +1,56 @@
+{
+  "id": "contradiction_005",
+  "problem": {
+    "premise": "Sarah lives in a landlocked country. She walks to the beach every morning.",
+    "hypothesis": "Sarah has easy access to ocean beaches.",
+    "expected_label": "contradiction",
+    "difficulty": "medium"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract geographic constraint",
+      "constraint": "Landlocked(country) → ∀location ∈ country: ¬Adjacent(location, ocean)"
+    },
+    "step_2": {
+      "description": "Extract proximity claim",
+      "constraint": "Walks to beach every morning → Accessible(beach, walking_distance)"
+    },
+    "step_3": {
+      "description": "Analyze beach type",
+      "constraint": "Beach typically implies: OceanBeach(beach) ∨ LakeBeach(beach) ∨ RiverBeach(beach)"
+    },
+    "step_4": {
+      "description": "Check hypothesis specificity",
+      "constraint": "Hypothesis explicitly states: OceanBeach(beach) ∧ EasyAccess(Sarah, beach)"
+    },
+    "step_5": {
+      "description": "Identify geographic contradiction",
+      "constraint": "Landlocked(country) ∧ LivesIn(Sarah, country) → ¬EasyAccess(Sarah, ocean_beach)"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Geographic landlocked property",
+      "Proximity/accessibility constraint",
+      "Beach type disambiguation"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "geographic_contradiction",
+        "span": "landlocked vs ocean access",
+        "confidence": 0.95
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "landlocked",
+      "ocean access",
+      "geographic impossibility"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["geographic_reasoning", "contradiction", "spatial_constraints"]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "piqa_010",
+  "problem": {
+    "question": "To open a tight jar lid, you should:",
+    "options": [
+      "Run hot water over the lid for a minute to expand the metal, then twist open.",
+      "Run cold water over the lid for a minute to contract the metal, then twist open."
+    ],
+    "correct_answer": 0,
+    "category": "daily_life",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Thermal expansion: materials expand when heated",
+      "Metal lid expands more than glass jar when heated",
+      "Expansion loosens the seal between lid and jar",
+      "Cold water would contract lid, making it tighter"
+    ],
+    "constraints": [
+      {
+        "type": "thermodynamics",
+        "description": "Materials expand with heat, contract with cold",
+        "priority": "critical"
+      },
+      {
+        "type": "material_property",
+        "description": "Different materials have different expansion rates",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["thermal expansion", "heat", "expand", "loosen"],
+    "must_not_contain": ["cold expands", "contraction loosens"],
+    "logic_requirements": [
+      "Explains thermal expansion principle",
+      "Correctly identifies heating as loosening mechanism"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "thermodynamics", "thermal_expansion"]
+  }
+}

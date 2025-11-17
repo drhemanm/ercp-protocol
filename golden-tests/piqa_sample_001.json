@@ -1,0 +1,45 @@
+{
+  "id": "piqa_001",
+  "problem": {
+    "question": "To separate egg whites from the yolk using a water bottle, you should:",
+    "options": [
+      "Squeeze the water bottle and press it against the yolk. Release, which creates suction and lifts the yolk.",
+      "Place the water bottle and press it against the yolk. Squeeze, which creates suction and lifts the yolk."
+    ],
+    "correct_answer": 0,
+    "category": "cooking",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Understand suction physics: releasing creates negative pressure",
+      "Sequence matters: squeeze first to empty air, then release near yolk",
+      "Suction occurs when bottle expands after being squeezed"
+    ],
+    "constraints": [
+      {
+        "type": "physical_law",
+        "description": "Suction requires creating low pressure area",
+        "priority": "critical"
+      },
+      {
+        "type": "causality",
+        "description": "Release action creates suction, not squeeze action",
+        "priority": "critical"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["suction", "release", "squeeze"],
+    "must_not_contain": ["gravity alone", "magic"],
+    "logic_requirements": [
+      "Explains why release creates suction",
+      "Correctly sequences squeeze-then-release"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "cooking", "suction"]
+  }
+}

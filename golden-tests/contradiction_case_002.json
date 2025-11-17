@@ -1,0 +1,52 @@
+{
+  "id": "contradiction_002",
+  "problem": {
+    "premise": "The meeting is scheduled for 3 PM today. Today is a holiday and the office is closed.",
+    "hypothesis": "The meeting will take place at the office at 3 PM today.",
+    "expected_label": "contradiction",
+    "difficulty": "medium"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract temporal constraint",
+      "constraint": "Meeting scheduled at 3 PM today → Scheduled(meeting, 3PM, today)"
+    },
+    "step_2": {
+      "description": "Extract location constraint from context",
+      "constraint": "Office closed today → ¬Accessible(office, today)"
+    },
+    "step_3": {
+      "description": "Infer impossibility",
+      "constraint": "Office meeting requires office accessibility: MeetingAt(office, today) → Accessible(office, today)"
+    },
+    "step_4": {
+      "description": "Identify contradiction",
+      "constraint": "Hypothesis requires: Accessible(office, today) but premise states: ¬Accessible(office, today)"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Temporal scheduling constraint",
+      "Location accessibility constraint",
+      "Prerequisite conditions for meeting"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "precondition_violation",
+        "span": "office accessibility",
+        "confidence": 0.95
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "accessibility",
+      "prerequisite",
+      "office closure"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["temporal_reasoning", "contradiction", "preconditions"]
+  }
+}

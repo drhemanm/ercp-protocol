@@ -1,0 +1,46 @@
+{
+  "id": "piqa_009",
+  "problem": {
+    "question": "To prevent a cutting board from sliding on the counter while chopping, you should:",
+    "options": [
+      "Place a damp towel underneath the cutting board to create friction.",
+      "Place a dry paper towel underneath the cutting board to create friction."
+    ],
+    "correct_answer": 0,
+    "category": "cooking",
+    "difficulty": "easy"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Sliding occurs when friction is insufficient",
+      "Damp towel has adhesive properties and high friction",
+      "Water creates temporary bonds between surfaces",
+      "Dry paper is slippery and slides easily"
+    ],
+    "constraints": [
+      {
+        "type": "friction",
+        "description": "Material must provide high friction coefficient",
+        "priority": "critical"
+      },
+      {
+        "type": "adhesion",
+        "description": "Moisture increases surface adhesion",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["friction", "damp", "grip", "adhesion"],
+    "must_not_contain": ["dry is better", "paper more friction"],
+    "logic_requirements": [
+      "Explains why dampness increases friction",
+      "Compares wet vs dry friction properties"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "friction", "cooking"]
+  }
+}

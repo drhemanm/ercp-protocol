@@ -1,0 +1,46 @@
+{
+  "id": "piqa_006",
+  "problem": {
+    "question": "To remove a stripped screw from wood, you should:",
+    "options": [
+      "Place a rubber band over the screw head and use the screwdriver through the rubber band for extra grip.",
+      "Place a paper towel over the screw head and use the screwdriver through the paper towel for extra grip."
+    ],
+    "correct_answer": 0,
+    "category": "repair",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Stripped screw has damaged grooves, reducing grip",
+      "Rubber band fills gaps and increases friction",
+      "Rubber is elastic and conforms to irregular surface",
+      "Paper towel is thin and tears easily under torque"
+    ],
+    "constraints": [
+      {
+        "type": "material_property",
+        "description": "Material must be strong and have high friction",
+        "priority": "critical"
+      },
+      {
+        "type": "mechanical",
+        "description": "Material must withstand rotational force",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["friction", "grip", "rubber", "elastic"],
+    "must_not_contain": ["paper is stronger", "any material works"],
+    "logic_requirements": [
+      "Explains why rubber provides better grip than paper",
+      "Understands material properties under stress"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "repair", "friction", "materials"]
+  }
+}

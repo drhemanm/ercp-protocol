@@ -1,0 +1,45 @@
+{
+  "id": "piqa_003",
+  "problem": {
+    "question": "How can you make a quesadilla?",
+    "options": [
+      "Place some cheese on a tortilla, fold it in half and place it in a hot skillet. Cook on each side until cheese is melted.",
+      "Place some cheese on a tortilla, fold it in half and place it in a cold skillet. Cook on each side until cheese is melted."
+    ],
+    "correct_answer": 0,
+    "category": "cooking",
+    "difficulty": "easy"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Heat is required to melt cheese",
+      "Hot skillet provides immediate heat transfer",
+      "Cold skillet requires heating time and uneven cooking"
+    ],
+    "constraints": [
+      {
+        "type": "thermodynamics",
+        "description": "Cheese melting requires heat above melting point",
+        "priority": "critical"
+      },
+      {
+        "type": "efficiency",
+        "description": "Pre-heated surface cooks faster and more evenly",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["heat", "melt", "temperature"],
+    "must_not_contain": ["cold melts cheese"],
+    "logic_requirements": [
+      "Explains why hot skillet is necessary",
+      "Understands heat transfer principles"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "cooking", "heat_transfer"]
+  }
+}

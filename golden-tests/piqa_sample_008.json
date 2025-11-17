@@ -1,0 +1,46 @@
+{
+  "id": "piqa_008",
+  "problem": {
+    "question": "To make ice cubes freeze faster, you should:",
+    "options": [
+      "Use hot water in the ice cube tray instead of cold water.",
+      "Use cold water in the ice cube tray instead of hot water."
+    ],
+    "correct_answer": 0,
+    "category": "science",
+    "difficulty": "hard"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Mpemba effect: hot water can freeze faster than cold water under certain conditions",
+      "Hot water evaporates more, reducing volume to freeze",
+      "Hot water loses heat through convection more efficiently",
+      "Dissolved gases escape from hot water, affecting freezing dynamics"
+    ],
+    "constraints": [
+      {
+        "type": "thermodynamics",
+        "description": "Mpemba effect is counterintuitive but real",
+        "priority": "critical"
+      },
+      {
+        "type": "experimental",
+        "description": "Effect depends on container, volume, and freezer conditions",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["Mpemba effect", "evaporation", "convection"],
+    "must_not_contain": ["simple temperature matters only"],
+    "logic_requirements": [
+      "Acknowledges counterintuitive nature of hot water freezing faster",
+      "Explains at least one mechanism (evaporation, convection, or dissolved gases)"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "thermodynamics", "mpemba_effect"]
+  }
+}

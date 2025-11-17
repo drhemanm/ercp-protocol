@@ -1,0 +1,47 @@
+{
+  "id": "piqa_011",
+  "problem": {
+    "question": "To keep bananas fresh longer, you should:",
+    "options": [
+      "Wrap the stems of the bananas in plastic wrap to slow down ripening.",
+      "Wrap the entire bunch of bananas in plastic wrap to slow down ripening."
+    ],
+    "correct_answer": 0,
+    "category": "food_storage",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Bananas release ethylene gas which causes ripening",
+      "Ethylene is primarily released from the stem area",
+      "Wrapping stems blocks ethylene release at source",
+      "Wrapping entire bunch traps ethylene around fruit, accelerating ripening"
+    ],
+    "constraints": [
+      {
+        "type": "biochemistry",
+        "description": "Ethylene gas triggers ripening cascade",
+        "priority": "critical"
+      },
+      {
+        "type": "gas_dynamics",
+        "description": "Gas containment location affects concentration",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["ethylene", "gas", "stem", "ripening"],
+    "must_not_contain": ["wrap everything", "trap gas around fruit"],
+    "logic_requirements": [
+      "Explains role of ethylene in ripening",
+      "Identifies stem as primary ethylene source",
+      "Understands why wrapping stems is better than whole bunch"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "biochemistry", "food_preservation"]
+  }
+}

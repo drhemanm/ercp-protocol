@@ -1,0 +1,45 @@
+{
+  "id": "piqa_002",
+  "problem": {
+    "question": "How do you keep a wood fire burning?",
+    "options": [
+      "Build the logs up in a cavern like way so the oxygen can easily get to the fire.",
+      "Build the logs up in a stack like way so the oxygen can easily get to the fire."
+    ],
+    "correct_answer": 0,
+    "category": "outdoor_activities",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Fire requires oxygen to burn (fire triangle: fuel, heat, oxygen)",
+      "Cavern structure allows air circulation from multiple angles",
+      "Stack structure blocks airflow, smothering the fire"
+    ],
+    "constraints": [
+      {
+        "type": "physical_law",
+        "description": "Combustion requires oxygen",
+        "priority": "critical"
+      },
+      {
+        "type": "structural",
+        "description": "Arrangement must allow airflow",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["oxygen", "airflow", "circulation"],
+    "must_not_contain": ["solid stack prevents air"],
+    "logic_requirements": [
+      "Explains oxygen necessity for combustion",
+      "Compares airflow in cavern vs stack structure"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "fire_safety", "combustion"]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "piqa_005",
+  "problem": {
+    "question": "How can you cool down a hot cup of coffee quickly?",
+    "options": [
+      "Pour the coffee into a wide, shallow bowl to increase surface area for heat dissipation.",
+      "Keep the coffee in the narrow mug and blow on it occasionally."
+    ],
+    "correct_answer": 0,
+    "category": "cooking",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Heat dissipation rate proportional to surface area",
+      "Wide shallow bowl maximizes surface area exposed to air",
+      "Increased surface area accelerates convective cooling",
+      "Narrow mug minimizes surface area, slowing cooling"
+    ],
+    "constraints": [
+      {
+        "type": "thermodynamics",
+        "description": "Heat transfer rate depends on surface area",
+        "priority": "critical"
+      },
+      {
+        "type": "geometry",
+        "description": "Surface area increases with width, decreases with depth",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["surface area", "heat dissipation", "cooling"],
+    "must_not_contain": ["shape doesn't matter"],
+    "logic_requirements": [
+      "Explains relationship between surface area and cooling rate",
+      "Correctly identifies wider vessel as having more surface area"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "thermodynamics", "surface_area"]
+  }
+}
