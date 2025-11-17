@@ -1,0 +1,15 @@
+{
+  "problem_id": "contradiction-001",
+  "description": "Explain the boiling point of water",
+  "reasoning_with_error": "Water boils at 100°C at sea level. This temperature is consistent. Water boils at 50°C at sea level.",
+  "expected_errors": [
+    {
+      "type": "contradiction",
+      "span": [0, 2],
+      "confidence_min": 0.75
+    }
+  ],
+  "metadata": {
+    "error_type": "numeric_contradiction"
+  }
+}
