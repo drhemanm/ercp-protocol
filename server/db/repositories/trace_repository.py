@@ -246,22 +246,85 @@ class TraceRepository:
     async def search_by_problem_description(
         self,
         search_term: str,
-        limit: int = 50
+        limit: int = 50,
+        use_fulltext: bool = True
     ) -> List[Trace]:
         """
-        Search traces by problem description.
+        Search traces by problem description using PostgreSQL full-text search.
 
         Args:
             search_term: Text to search for in problem descriptions
             limit: Maximum number of results
+            use_fulltext: Use full-text search (default) or fallback to ILIKE
 
         Returns:
-            List of matching traces
+            List of matching traces ordered by relevance (full-text) or creation time
+
+        Note:
+            Full-text search requires the migration 002_add_fulltext_search to be applied.
+            If not applied, set use_fulltext=False to use ILIKE pattern matching.
         """
+        if use_fulltext:
+            # Use PostgreSQL full-text search with ranking
+            # to_tsquery requires proper formatting, so we use plainto_tsquery for user input
+            from sqlalchemy import text, func
+
+            result = await self.session.execute(
+                select(Trace)
+                .where(
+                    text("problem_description_tsv @@ plainto_tsquery('english', :search_term)")
+                )
+                .order_by(
+                    # Order by relevance (ts_rank) first, then by creation time
+                    text("ts_rank(problem_description_tsv, plainto_tsquery('english', :search_term)) DESC"),
+                    Trace.created_at.desc()
+                )
+                .limit(limit)
+                .params(search_term=search_term)
+            )
+            return list(result.scalars().all())
+        else:
+            # Fallback to ILIKE pattern matching (less efficient, but works without migration)
+            result = await self.session.execute(
+                select(Trace)
+                .where(Trace.problem_description.ilike(f"%{search_term}%"))
+                .order_by(Trace.created_at.desc())
+                .limit(limit)
+            )
+            return list(result.scalars().all())
+
+    async def search_by_problem_description_fuzzy(
+        self,
+        search_term: str,
+        limit: int = 50,
+        similarity_threshold: float = 0.3
+    ) -> List[Trace]:
+        """
+        Fuzzy search traces by problem description using trigram similarity.
+
+        Args:
+            search_term: Text to search for in problem descriptions
+            limit: Maximum number of results
+            similarity_threshold: Minimum similarity score (0.0 to 1.0)
+
+        Returns:
+            List of matching traces ordered by similarity
+
+        Note:
+            Requires migration 002_add_fulltext_search to be applied (enables pg_trgm).
+        """
+        from sqlalchemy import text, func
+
         result = await self.session.execute(
             select(Trace)
-            .where(Trace.problem_description.ilike(f"%{search_term}%"))
-            .order_by(Trace.created_at.desc())
+            .where(
+                text("similarity(problem_description, :search_term) > :threshold")
+            )
+            .order_by(
+                text("similarity(problem_description, :search_term) DESC"),
+                Trace.created_at.desc()
+            )
             .limit(limit)
+            .params(search_term=search_term, threshold=similarity_threshold)
         )
         return list(result.scalars().all())

@@ -12,11 +12,15 @@ import uuid
 import os
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
+import contextvars
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# Context variable for request ID tracking
+request_id_ctx_var = contextvars.ContextVar("request_id", default=None)
 
 # Import operators
 from server.operators import (
@@ -88,6 +92,47 @@ app = FastAPI(
 )
 
 # Add middleware
+
+
+@app.middleware("http")
+async def add_request_id_middleware(request: Request, call_next):
+    """
+    Middleware to add request ID tracking across the entire request lifecycle.
+
+    This middleware:
+    1. Extracts X-Request-ID from headers or generates a new one
+    2. Stores it in context variable for access throughout the request
+    3. Propagates it through logging context
+    4. Adds it to response headers
+
+    Benefits:
+    - Enables request tracing across API → Database → ML models → Logs
+    - Simplifies debugging by correlating logs across services
+    - Supports distributed tracing
+    """
+    # Extract or generate request ID
+    request_id = request.headers.get("X-Request-ID") or request.headers.get("x-request-id")
+    if not request_id:
+        request_id = str(uuid.uuid4())
+
+    # Store in context variable
+    request_id_ctx_var.set(request_id)
+
+    # Add to request state for easy access
+    request.state.request_id = request_id
+
+    # Bind to logging context for automatic inclusion in all logs
+    from server.logging.logger import logging_context
+    with logging_context(request_id=request_id):
+        # Process request
+        response = await call_next(request)
+
+        # Add request ID to response headers for client-side tracking
+        response.headers["X-Request-ID"] = request_id
+
+        return response
+
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 app.add_middleware(SanitizationMiddleware)
