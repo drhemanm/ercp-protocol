@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 from typing import List, Optional, Any
+import os
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -19,7 +20,19 @@ from pydantic import BaseModel, Field
 # CONFIGURATION
 # ============================
 
-APP_SECRET = b"CHANGE_THIS_IN_PRODUCTION"   # for HMAC signatures
+APP_SECRET = os.getenv("APP_SECRET_KEY")
+if not APP_SECRET:
+    raise RuntimeError(
+        "APP_SECRET_KEY environment variable is required. "
+        "Generate one with: openssl rand -hex 32"
+    )
+
+APP_SECRET = APP_SECRET.encode('utf-8')
+
+if len(APP_SECRET) < 32:
+    raise RuntimeError(
+        "APP_SECRET_KEY must be at least 32 characters long"
+    )
 PROTO_VERSION = "ercp-1.0"
 
 
