@@ -1,11 +1,12 @@
 """
 Model Registry for ERCP Protocol
-Manages loading, caching, and accessing ML models.
+Manages loading, caching, and accessing ML models with thread safety.
 """
 
 import os
 import time
 import hashlib
+import threading
 from typing import Dict, Any, Optional
 from functools import lru_cache
 import torch
@@ -21,7 +22,7 @@ import spacy
 
 
 class ModelRegistry:
-    """Singleton registry for managing ML models with memory-aware LRU eviction."""
+    """Singleton registry for managing ML models with memory-aware LRU eviction and thread safety."""
 
     _instance = None
     _models: Dict[str, Any] = {}
@@ -43,6 +44,10 @@ class ModelRegistry:
         # Memory management settings
         self.max_memory_gb = float(os.getenv("MODEL_REGISTRY_MAX_MEMORY_GB", "8.0"))
         self.model_ttl_seconds = float(os.getenv("MODEL_TTL_SECONDS", "3600"))  # 1 hour default
+
+        # Thread safety
+        self._lock = threading.Lock()
+        self._loading = {}  # Track models currently being loaded
 
     def _get_device(self) -> str:
         """Determine the compute device (CPU or CUDA)."""
@@ -146,6 +151,87 @@ class ModelRegistry:
             self._evict_lru_model()
             current_memory = self._get_memory_usage()
 
+    def _load_with_lock(
+        self,
+        cache_key: str,
+        loader_func: callable,
+        estimated_size_gb: float = 1.0
+    ):
+        """
+        Thread-safe model loading with double-checked locking pattern.
+
+        Args:
+            cache_key: Unique key for caching
+            loader_func: Function that loads and returns the model
+            estimated_size_gb: Estimated model size for memory management
+
+        Returns:
+            Loaded model
+        """
+        # Fast path: Already cached (no lock needed for read)
+        if cache_key in self._models:
+            with self._lock:
+                if cache_key in self._models:
+                    self._last_used[cache_key] = time.time()
+                    return self._models[cache_key]
+
+        # Acquire lock for loading
+        with self._lock:
+            # Double-check - might have been loaded while waiting
+            if cache_key in self._models:
+                self._last_used[cache_key] = time.time()
+                return self._models[cache_key]
+
+            # Check if another thread is loading
+            if cache_key in self._loading:
+                loading_event = self._loading[cache_key]
+            else:
+                # We'll load it
+                loading_event = threading.Event()
+                self._loading[cache_key] = loading_event
+
+        # If we're not the loading thread, wait
+        if not loading_event.is_set() and self._loading.get(cache_key) is loading_event:
+            # Another thread is loading, wait for it
+            pass
+        else:
+            # We need to check if we should wait
+            other_event = self._loading.get(cache_key)
+            if other_event and other_event is not loading_event:
+                print(f"Waiting for {cache_key} to load...")
+                other_event.wait(timeout=300)  # 5 minute timeout
+                
+                if cache_key in self._models:
+                    with self._lock:
+                        self._last_used[cache_key] = time.time()
+                        return self._models[cache_key]
+                # Fall through to load ourselves if wait failed
+
+        # We're the loading thread
+        try:
+            self._ensure_memory_available(estimated_size_gb=estimated_size_gb)
+            
+            # Load model (outside lock for better concurrency)
+            model = loader_func()
+
+            # Cache result
+            with self._lock:
+                self._models[cache_key] = model
+                self._last_used[cache_key] = time.time()
+                if hasattr(model, 'parameters'):
+                    self._model_sizes[cache_key] = self._estimate_model_size(model)
+                else:
+                    self._model_sizes[cache_key] = estimated_size_gb
+
+            return model
+
+        finally:
+            # Signal completion
+            with self._lock:
+                if cache_key in self._loading:
+                    self._loading[cache_key].set()
+                    del self._loading[cache_key]
+
     def get_generation_model(
         self, model_name: Optional[str] = None
     ) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
@@ -161,32 +247,20 @@ class ModelRegistry:
         model_name = model_name or os.getenv("GENERATE_MODEL_NAME", "gpt2")
         cache_key = f"gen_{model_name}"
 
-        # Update last used timestamp if model is cached
-        if cache_key in self._models:
-            self._last_used[cache_key] = time.time()
-            return self._models[cache_key]
+        def loader():
+            print(f"Loading generation model: {model_name}")
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, cache_dir=self.cache_dir
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name, cache_dir=self.cache_dir
+            )
+            model = model.to(self.device)
+            model.eval()
+            print(f"Loaded generation model: {model_name}")
+            return (model, tokenizer)
 
-        # Ensure memory is available before loading
-        self._ensure_memory_available(estimated_size_gb=2.0)
-
-        print(f"Loading generation model: {model_name}")
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_name, cache_dir=self.cache_dir
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, cache_dir=self.cache_dir
-        )
-        model = model.to(self.device)
-        model.eval()
-
-        # Track model size and last used time
-        self._models[cache_key] = (model, tokenizer)
-        self._model_sizes[cache_key] = self._estimate_model_size(model)
-        self._last_used[cache_key] = time.time()
-
-        print(f"Loaded model {model_name}: {self._model_sizes[cache_key]:.2f}GB")
-
-        return self._models[cache_key]
+        return self._load_with_lock(cache_key, loader, estimated_size_gb=2.0)
 
     def get_nli_pipeline(self, model_name: Optional[str] = None):
         """
@@ -203,29 +277,17 @@ class ModelRegistry:
         )
         cache_key = f"nli_{model_name}"
 
-        # Update last used timestamp if model is cached
-        if cache_key in self._models:
-            self._last_used[cache_key] = time.time()
-            return self._models[cache_key]
+        def loader():
+            print(f"Loading NLI model: {model_name}")
+            device_id = 0 if self.device.startswith("cuda") else -1
+            return pipeline(
+                "text-classification",
+                model=model_name,
+                device=device_id,
+                cache_dir=self.cache_dir,
+            )
 
-        # Ensure memory is available before loading
-        self._ensure_memory_available(estimated_size_gb=1.5)
-
-        print(f"Loading NLI model: {model_name}")
-        device_id = 0 if self.device.startswith("cuda") else -1
-        nli_pipeline = pipeline(
-            "text-classification",
-            model=model_name,
-            device=device_id,
-            cache_dir=self.cache_dir,
-        )
-
-        self._models[cache_key] = nli_pipeline
-        self._last_used[cache_key] = time.time()
-        # Estimate size for pipeline models
-        self._model_sizes[cache_key] = 1.0  # Rough estimate
-
-        return self._models[cache_key]
+        return self._load_with_lock(cache_key, loader, estimated_size_gb=1.5)
 
     def get_sentence_transformer(self, model_name: Optional[str] = None):
         """
@@ -242,24 +304,13 @@ class ModelRegistry:
         )
         cache_key = f"st_{model_name}"
 
-        # Update last used timestamp if model is cached
-        if cache_key in self._models:
-            self._last_used[cache_key] = time.time()
-            return self._models[cache_key]
+        def loader():
+            print(f"Loading sentence transformer: {model_name}")
+            return SentenceTransformer(
+                model_name, cache_folder=self.cache_dir, device=self.device
+            )
 
-        # Ensure memory is available before loading
-        self._ensure_memory_available(estimated_size_gb=0.5)
-
-        print(f"Loading sentence transformer: {model_name}")
-        st_model = SentenceTransformer(
-            model_name, cache_folder=self.cache_dir, device=self.device
-        )
-
-        self._models[cache_key] = st_model
-        self._last_used[cache_key] = time.time()
-        self._model_sizes[cache_key] = 0.4  # Rough estimate for MiniLM
-
-        return self._models[cache_key]
+        return self._load_with_lock(cache_key, loader, estimated_size_gb=0.5)
 
     def get_spacy_nlp(self, model_name: Optional[str] = None):
         """
@@ -274,28 +325,18 @@ class ModelRegistry:
         model_name = model_name or os.getenv("SPACY_MODEL", "en_core_web_sm")
         cache_key = f"spacy_{model_name}"
 
-        # Update last used timestamp if model is cached
-        if cache_key in self._models:
-            self._last_used[cache_key] = time.time()
-            return self._models[cache_key]
+        def loader():
+            print(f"Loading spaCy model: {model_name}")
+            try:
+                nlp = spacy.load(model_name)
+            except OSError:
+                # Model not found, attempt to download
+                print(f"Downloading spaCy model: {model_name}")
+                os.system(f"python -m spacy download {model_name}")
+                nlp = spacy.load(model_name)
+            return nlp
 
-        # Ensure memory is available before loading
-        self._ensure_memory_available(estimated_size_gb=0.3)
-
-        print(f"Loading spaCy model: {model_name}")
-        try:
-            nlp = spacy.load(model_name)
-        except OSError:
-            # Model not found, attempt to download
-            print(f"Downloading spaCy model: {model_name}")
-            os.system(f"python -m spacy download {model_name}")
-            nlp = spacy.load(model_name)
-
-        self._models[cache_key] = nlp
-        self._last_used[cache_key] = time.time()
-        self._model_sizes[cache_key] = 0.2  # Rough estimate for small model
-
-        return self._models[cache_key]
+        return self._load_with_lock(cache_key, loader, estimated_size_gb=0.3)
 
     def get_model_fingerprint(self, model_name: str) -> str:
         """
@@ -314,7 +355,12 @@ class ModelRegistry:
 
     def clear_cache(self):
         """Clear all cached models (useful for memory management)."""
-        self._models.clear()
+        with self._lock:
+            self._models.clear()
+            self._last_used.clear()
+            self._model_sizes.clear()
+            self._loading.clear()
+        
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
         print("Model cache cleared")
 
