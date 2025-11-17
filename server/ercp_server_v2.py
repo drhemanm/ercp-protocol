@@ -25,6 +25,10 @@ request_id_ctx_var = contextvars.ContextVar("request_id", default=None)
 # Import operators
 from server.operators import (
     GenerateOperator,
+    GenerationError,
+    InvalidInputError,
+    OutOfMemoryError,
+    GenerationTimeoutError,
     VerifyOperator,
     ExtractConstraintsOperator,
     StabilizeOperator,
@@ -292,14 +296,78 @@ async def run_ercp(
                     duration_ms=gen_duration * 1000,
                 )
 
-            except Exception as e:
+            except InvalidInputError as e:
+                # Input validation failed - don't retry, fail immediately
+                logger.error(
+                    "ercp.generate.invalid_input",
+                    trace_id=trace_id,
+                    iteration=iteration,
+                    error=str(e),
+                )
+                trace.status = "failed"
+                await db.commit()
+                raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
+
+            except OutOfMemoryError as e:
+                # OOM - log and fail gracefully
+                logger.error(
+                    "ercp.generate.oom",
+                    trace_id=trace_id,
+                    iteration=iteration,
+                    error=str(e),
+                )
+                trace.status = "failed"
+                await db.commit()
+                raise HTTPException(
+                    status_code=503, 
+                    detail=f"Service temporarily unavailable: {str(e)}"
+                )
+
+            except GenerationTimeoutError as e:
+                # Timeout - might be retryable with different config
+                logger.error(
+                    "ercp.generate.timeout",
+                    trace_id=trace_id,
+                    iteration=iteration,
+                    error=str(e),
+                )
+                trace.status = "partial"
+                await db.commit()
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"Generation timeout: {str(e)}"
+                )
+
+            except GenerationError as e:
+                # General generation error
                 logger.error(
                     "ercp.generate.error",
                     trace_id=trace_id,
                     iteration=iteration,
                     error=str(e),
                 )
-                raise
+                trace.status = "failed"
+                await db.commit()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Generation failed: {str(e)}"
+                )
+
+            except Exception as e:
+                # Unexpected error
+                logger.error(
+                    "ercp.generate.unexpected",
+                    trace_id=trace_id,
+                    iteration=iteration,
+                    error_type=type(e).__name__,
+                    error=str(e),
+                )
+                trace.status = "failed"
+                await db.commit()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Unexpected error: {type(e).__name__}"
+                )
 
             # ========== VERIFY ==========
             try:
@@ -504,6 +572,10 @@ async def run_ercp(
             "duration_seconds": duration,
             "proto_version": "ercp-2.0",
         }
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
 
     except Exception as e:
         logger.error("ercp.run.error", trace_id=trace_id, error=str(e))
