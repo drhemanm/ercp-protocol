@@ -41,6 +41,13 @@ from .db.repositories import (
     ModelCacheRepository
 )
 
+# Import authentication and middleware
+from .auth import optional_auth, get_api_key, optional_api_key
+from .middleware import setup_cors, limiter, sanitize_input
+from .middleware.logging_middleware import LoggingMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 
 # Load environment variables
 load_dotenv()
@@ -191,6 +198,25 @@ app = FastAPI(
     description="Production implementation for ERCP protocol (spec v1.0)"
 )
 
+# ============================
+# Configure Middleware & Security
+# ============================
+
+# CORS - must be first
+setup_cors(app)
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Logging middleware
+app.add_middleware(LoggingMiddleware)
+
+# Input sanitization middleware
+app.middleware("http")(sanitize_input)
+
+logger.info("Security middleware configured successfully")
+
 
 # ============================
 # Initialize Operators (Singleton)
@@ -292,15 +318,20 @@ async def health_check():
 # ============================
 
 @app.post("/ercp/v1/run")
+@limiter.limit("10/minute")  # Rate limit: 10 requests per minute per IP
 async def run_ercp(
     req: RunRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(optional_api_key)
 ):
     """
     Main ERCP execution endpoint.
-    
+
     Runs the complete ERCP loop: Generate → Verify → Extract → Stabilize
     Persists all trace data to database.
+
+    Authentication: Optional (API key via X-API-Key header)
+    Rate limit: 10 requests/minute per IP
     """
     trace_id = UUID(req.trace_id) if req.trace_id else make_trace_id()
     problem = req.problem
@@ -536,11 +567,13 @@ async def run_ercp(
 # ============================
 
 @app.post("/ercp/v1/generate")
+@limiter.limit("100/minute")
 async def api_generate(
     req: GenerateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(optional_api_key)
 ):
-    """Generate reasoning endpoint."""
+    """Generate reasoning endpoint (optional authentication, rate limited)."""
     trace_id = UUID(req.trace_id) if req.trace_id else make_trace_id()
     
     try:
@@ -566,11 +599,13 @@ async def api_generate(
 
 
 @app.post("/ercp/v1/verify")
+@limiter.limit("100/minute")
 async def api_verify(
     req: VerifyRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(optional_api_key)
 ):
-    """Verify reasoning endpoint."""
+    """Verify reasoning endpoint (optional authentication, rate limited)."""
     trace_id = UUID(req.trace_id) if req.trace_id else make_trace_id()
     
     try:
@@ -598,11 +633,13 @@ async def api_verify(
 
 
 @app.post("/ercp/v1/extract_constraints")
+@limiter.limit("100/minute")
 async def api_extract(
     req: ExtractRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(optional_api_key)
 ):
-    """Extract constraints endpoint."""
+    """Extract constraints endpoint (optional authentication, rate limited)."""
     trace_id = UUID(req.trace_id) if req.trace_id else make_trace_id()
     
     try:
@@ -628,11 +665,13 @@ async def api_extract(
 
 
 @app.post("/ercp/v1/stabilize")
+@limiter.limit("100/minute")
 async def api_stabilize(
     req: StabilizeRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: Optional[str] = Depends(optional_api_key)
 ):
-    """Stabilize (semantic similarity) endpoint."""
+    """Stabilize (semantic similarity) endpoint (optional authentication, rate limited)."""
     trace_id = UUID(req.trace_id) if req.trace_id else make_trace_id()
     
     try:
