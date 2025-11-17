@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+env/
+.venv/
+.venv*/
+
+# Virtualenv
+venv/
+venv.bak/
+
+# VS Code
+.vscode/
+
+# Pycharm
+.idea/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Secrets / local configs
+.env
+config/secrets.yaml
+
+# Mac
+.DS_Store
