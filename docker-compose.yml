@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ercp-postgres
+    environment:
+      POSTGRES_DB: ercp
+      POSTGRES_USER: ercp_user
+      POSTGRES_PASSWORD: ercp_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ercp_user -d ercp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ercp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ercp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ercp-network
+
+  ercp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ercp-server
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # Prometheus metrics
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://ercp_user:ercp_pass@postgres:5432/ercp
+
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+
+      # Security
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-this-in-production}
+
+      # Application
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+
+      # ML Models
+      DEVICE: ${DEVICE:-cpu}
+
+      # Features
+      ENABLE_METRICS: "true"
+
+      # Rate Limiting
+      RATE_LIMIT_PER_MINUTE: "60"
+      RATE_LIMIT_PER_HOUR: "1000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - model_cache:/app/models/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ercp-network
+    restart: unless-stopped
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ercp-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - ercp-network
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ercp-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ercp-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+  redis_data:
+  model_cache:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ercp-network:
+    driver: bridge

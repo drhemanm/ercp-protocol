@@ -1,0 +1,14 @@
+# Prometheus configuration for ERCP Protocol
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'ercp-monitor'
+
+scrape_configs:
+  - job_name: 'ercp-server'
+    static_configs:
+      - targets: ['ercp-server:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
