@@ -46,6 +46,12 @@ services:
     environment:
       # Database
       DATABASE_URL: postgresql+asyncpg://ercp_user:ercp_pass@postgres:5432/ercp
+      # Database Timeouts
+      DB_POOL_TIMEOUT: "30"
+      DB_STATEMENT_TIMEOUT: "60"
+      DB_QUERY_TIMEOUT_MS: "60000"
+      DB_POOL_SIZE: "20"
+      DB_MAX_OVERFLOW: "10"
 
       # Redis
       REDIS_URL: redis://redis:6379/0
