@@ -23,6 +23,40 @@ from .base import BaseOperator
 from server.models.model_registry import model_registry
 from server.logging import logger
 
+
+# ============================================
+# Custom Exceptions
+# ============================================
+
+class GenerationError(Exception):
+    """Base exception for generation errors."""
+    pass
+
+
+class ModelLoadError(GenerationError):
+    """Failed to load model."""
+    pass
+
+
+class GenerationTimeoutError(GenerationError):
+    """Generation exceeded timeout."""
+    pass
+
+
+class OutOfMemoryError(GenerationError):
+    """Insufficient memory for generation."""
+    pass
+
+
+class InvalidInputError(GenerationError):
+    """Invalid input provided."""
+    pass
+
+
+# ============================================
+# OpenTelemetry Setup
+# ============================================
+
 # Initialize OpenTelemetry tracer and meter
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
@@ -125,14 +159,45 @@ class GenerateOperator(BaseOperator):
 
         Returns:
             Dictionary with reasoning_id, reasoning_text, sentences, claims
+            
+        Raises:
+            InvalidInputError: If input validation fails
+            GenerationError: If generation fails
         """
+        # ============================================
+        # INPUT VALIDATION
+        # ============================================
+        
+        if not problem or not isinstance(problem, str):
+            raise InvalidInputError("Problem must be a non-empty string")
+        
+        if len(problem.strip()) == 0:
+            raise InvalidInputError("Problem cannot be empty or whitespace only")
+        
+        if len(problem) > 10000:  # Reasonable limit
+            raise InvalidInputError(f"Problem too long: {len(problem)} chars (max 10000)")
+        
+        if not isinstance(constraints, list):
+            raise InvalidInputError("Constraints must be a list")
+        
+        if not isinstance(config, dict):
+            raise InvalidInputError("Config must be a dictionary")
+        
+        max_tokens = config.get("max_tokens", 500)
+        if not isinstance(max_tokens, int) or max_tokens < 10 or max_tokens > 4000:
+            raise InvalidInputError(f"max_tokens must be between 10 and 4000, got {max_tokens}")
+
+        # ============================================
+        # GENERATION WITH PROPER ERROR HANDLING
+        # ============================================
+        
         with tracer.start_as_current_span(
             "generate_operator.execute",
             attributes={
                 "model.name": self.model_name,
                 "problem.length": len(problem),
                 "constraints.count": len(constraints),
-                "config.max_tokens": config.get("max_tokens", 500),
+                "config.max_tokens": max_tokens,
                 "config.temperature": config.get("temperature", 0.0),
             }
         ) as span:
@@ -160,7 +225,17 @@ class GenerateOperator(BaseOperator):
                     "claims": claims,
                     "model_name": self.model_name,
                 }
+                
+            except InvalidInputError:
+                # Re-raise validation errors as-is
+                raise
+                
+            except GenerationError:
+                # Re-raise our custom errors as-is
+                raise
+                
             except Exception as e:
+                # Wrap unexpected errors
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 error_counter.add(
@@ -171,7 +246,18 @@ class GenerateOperator(BaseOperator):
                         "operation": "execute"
                     }
                 )
-                raise
+                
+                logger.error(
+                    "generate.unexpected_error",
+                    prompt_length=len(prompt) if 'prompt' in locals() else 0,
+                    error_type=type(e).__name__,
+                    error=str(e)
+                )
+                
+                # Wrap in our exception type with context
+                raise GenerationError(
+                    f"Unexpected error during generation: {type(e).__name__}: {str(e)}"
+                ) from e
 
     def _build_prompt(
         self, problem: str, constraints: List[Dict[str, Any]]
@@ -217,8 +303,9 @@ class GenerateOperator(BaseOperator):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type((RuntimeError, ConnectionError)),
+        retry=retry_if_exception_type((RuntimeError, ConnectionError, GenerationTimeoutError)),
         before_sleep=before_sleep_log(logger, "WARNING"),
+        reraise=True,
     )
     def _generate_text(self, prompt: str, config: Dict[str, Any]) -> str:
         """
@@ -380,9 +467,14 @@ class GenerateOperator(BaseOperator):
                     max_tokens=max_tokens,
                     error=str(e)
                 )
-                # Clear CUDA cache and retry
+                # Clear CUDA cache
                 torch.cuda.empty_cache()
-                raise
+                
+                # Wrap in our exception type
+                raise OutOfMemoryError(
+                    f"CUDA out of memory. Try reducing max_tokens (current: {max_tokens}) "
+                    f"or use a smaller model."
+                ) from e
 
             except RuntimeError as e:
                 span.set_status(Status(StatusCode.ERROR, "Runtime error"))
@@ -394,7 +486,17 @@ class GenerateOperator(BaseOperator):
                     prompt_length=len(prompt),
                     error=str(e)
                 )
-                raise
+                
+                # Check if it's a timeout or other runtime error
+                error_msg = str(e).lower()
+                if "timeout" in error_msg or "killed" in error_msg:
+                    raise GenerationTimeoutError(
+                        f"Generation exceeded timeout. Error: {str(e)}"
+                    ) from e
+                else:
+                    raise GenerationError(
+                        f"Model generation failed: {str(e)}"
+                    ) from e
 
             except Exception as e:
                 span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -407,8 +509,11 @@ class GenerateOperator(BaseOperator):
                     error_type=type(e).__name__,
                     error=str(e)
                 )
-                # Fallback: return a minimal response
-                return "Unable to generate response due to technical error."
+                
+                # Don't return a string - raise an exception
+                raise GenerationError(
+                    f"Unexpected generation error: {type(e).__name__}: {str(e)}"
+                ) from e
 
     def _segment_sentences(self, text: str) -> List[str]:
         """
