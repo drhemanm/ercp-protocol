@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ercp-server
+  labels:
+    app: ercp-server
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ercp-server
+  template:
+    metadata:
+      labels:
+        app: ercp-server
+        version: v1
+    spec:
+      containers:
+      - name: ercp-server
+        image: gcr.io/YOUR_PROJECT_ID/ercp-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ercp-secrets
+              key: database-url
+
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: ercp-secrets
+              key: redis-url
+
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ercp-secrets
+              key: jwt-secret-key
+
+        - name: APP_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ercp-secrets
+              key: app-secret-key
+
+        - name: ENVIRONMENT
+          value: "production"
+
+        - name: LOG_LEVEL
+          value: "INFO"
+
+        - name: LOG_FORMAT
+          value: "json"
+
+        - name: ENABLE_METRICS
+          value: "true"
+
+        - name: DEVICE
+          value: "cpu"
+
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/models/cache
+
+      volumes:
+      - name: model-cache
+        emptyDir:
+          sizeLimit: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ercp-server
+  labels:
+    app: ercp-server
+spec:
+  type: LoadBalancer
+  selector:
+    app: ercp-server
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ercp-server-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ercp-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
