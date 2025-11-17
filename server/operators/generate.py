@@ -8,6 +8,7 @@ import re
 import asyncio
 from typing import List, Dict, Any, Optional
 import torch
+import psutil
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -15,9 +16,75 @@ from tenacity import (
     retry_if_exception_type,
     before_sleep_log,
 )
+from opentelemetry import trace, metrics
+from opentelemetry.trace import Status, StatusCode
+
 from .base import BaseOperator
 from server.models.model_registry import model_registry
 from server.logging import logger
+
+# Initialize OpenTelemetry tracer and meter
+tracer = trace.get_tracer(__name__)
+meter = metrics.get_meter(__name__)
+
+# Create custom metrics for ML operations
+token_generation_counter = meter.create_counter(
+    name="ml.token_generation.total",
+    description="Total number of tokens generated",
+    unit="tokens"
+)
+
+inference_latency_histogram = meter.create_histogram(
+    name="ml.inference.latency",
+    description="Distribution of model inference latency",
+    unit="ms"
+)
+
+gpu_memory_gauge = meter.create_observable_gauge(
+    name="ml.gpu.memory_used",
+    description="Current GPU memory usage",
+    unit="bytes",
+    callbacks=[lambda options: _get_gpu_memory_usage()]
+)
+
+cache_hit_counter = meter.create_counter(
+    name="ml.cache.hits",
+    description="Number of cache hits",
+    unit="hits"
+)
+
+cache_miss_counter = meter.create_counter(
+    name="ml.cache.misses",
+    description="Number of cache misses",
+    unit="misses"
+)
+
+error_counter = meter.create_counter(
+    name="ml.errors.total",
+    description="Total number of ML operation errors by model",
+    unit="errors"
+)
+
+def _get_gpu_memory_usage():
+    """Get current GPU memory usage for observability."""
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            allocated = torch.cuda.memory_allocated(i)
+            cached = torch.cuda.memory_reserved(i)
+            yield metrics.Observation(
+                value=allocated,
+                attributes={
+                    "device_id": i,
+                    "metric_type": "allocated"
+                }
+            )
+            yield metrics.Observation(
+                value=cached,
+                attributes={
+                    "device_id": i,
+                    "metric_type": "cached"
+                }
+            )
 
 
 class GenerateOperator(BaseOperator):
@@ -59,23 +126,52 @@ class GenerateOperator(BaseOperator):
         Returns:
             Dictionary with reasoning_id, reasoning_text, sentences, claims
         """
-        # Build prompt with constraints
-        prompt = self._build_prompt(problem, constraints)
+        with tracer.start_as_current_span(
+            "generate_operator.execute",
+            attributes={
+                "model.name": self.model_name,
+                "problem.length": len(problem),
+                "constraints.count": len(constraints),
+                "config.max_tokens": config.get("max_tokens", 500),
+                "config.temperature": config.get("temperature", 0.0),
+            }
+        ) as span:
+            try:
+                # Build prompt with constraints
+                prompt = self._build_prompt(problem, constraints)
+                span.set_attribute("prompt.length", len(prompt))
 
-        # Generate text
-        reasoning_text = self._generate_text(prompt, config)
+                # Generate text
+                reasoning_text = self._generate_text(prompt, config)
+                span.set_attribute("output.length", len(reasoning_text))
 
-        # Parse output
-        sentences = self._segment_sentences(reasoning_text)
-        claims = self._extract_claims(reasoning_text, sentences)
+                # Parse output
+                sentences = self._segment_sentences(reasoning_text)
+                claims = self._extract_claims(reasoning_text, sentences)
 
-        return {
-            "reasoning_id": self._generate_id(),
-            "reasoning_text": reasoning_text,
-            "sentences": sentences,
-            "claims": claims,
-            "model_name": self.model_name,
-        }
+                span.set_attribute("output.sentences", len(sentences))
+                span.set_attribute("output.claims", len(claims))
+                span.set_status(Status(StatusCode.OK))
+
+                return {
+                    "reasoning_id": self._generate_id(),
+                    "reasoning_text": reasoning_text,
+                    "sentences": sentences,
+                    "claims": claims,
+                    "model_name": self.model_name,
+                }
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                error_counter.add(
+                    1,
+                    attributes={
+                        "model": self.model_name,
+                        "error_type": type(e).__name__,
+                        "operation": "execute"
+                    }
+                )
+                raise
 
     def _build_prompt(
         self, problem: str, constraints: List[Dict[str, Any]]
@@ -140,109 +236,179 @@ class GenerateOperator(BaseOperator):
             TimeoutError: If generation exceeds timeout
             RuntimeError: If model generation fails
         """
-        max_tokens = config.get("max_tokens", 500)
-        temperature = config.get("temperature", 0.0)
-        deterministic = config.get("deterministic", True)
-        timeout_seconds = config.get("generation_timeout", 60.0)
+        with tracer.start_as_current_span(
+            "generate_operator.inference",
+            attributes={
+                "model.name": self.model_name,
+                "prompt.length": len(prompt),
+            }
+        ) as span:
+            max_tokens = config.get("max_tokens", 500)
+            temperature = config.get("temperature", 0.0)
+            deterministic = config.get("deterministic", True)
+            timeout_seconds = config.get("generation_timeout", 60.0)
 
-        # Set seed for deterministic generation
-        if deterministic:
-            torch.manual_seed(42)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(42)
+            span.set_attribute("config.max_tokens", max_tokens)
+            span.set_attribute("config.temperature", temperature)
+            span.set_attribute("config.deterministic", deterministic)
 
-        try:
-            # Tokenize input
-            inputs = self.tokenizer(
-                prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048
-            )
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+            # Set seed for deterministic generation
+            if deterministic:
+                torch.manual_seed(42)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed_all(42)
 
-            # Generate with timeout protection
-            start_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
-            end_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+            try:
+                # Record GPU memory before inference
+                if torch.cuda.is_available():
+                    gpu_memory_before = torch.cuda.memory_allocated() / (1024 ** 2)  # MB
+                    span.set_attribute("gpu.memory_before_mb", gpu_memory_before)
 
-            if start_time:
-                start_time.record()
+                # Tokenize input
+                inputs = self.tokenizer(
+                    prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048
+                )
+                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
-            with torch.no_grad():
-                if temperature == 0.0:
-                    # Greedy decoding
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=max_tokens,
-                        do_sample=False,
-                        num_beams=1,
-                        pad_token_id=self.tokenizer.eos_token_id,
-                        early_stopping=True,
-                    )
+                input_token_count = inputs['input_ids'].shape[1]
+                span.set_attribute("tokens.input", input_token_count)
+
+                # Generate with timeout protection
+                import time
+                inference_start = time.perf_counter()
+
+                start_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+                end_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+
+                if start_time:
+                    start_time.record()
+
+                with torch.no_grad():
+                    if temperature == 0.0:
+                        # Greedy decoding
+                        outputs = self.model.generate(
+                            **inputs,
+                            max_new_tokens=max_tokens,
+                            do_sample=False,
+                            num_beams=1,
+                            pad_token_id=self.tokenizer.eos_token_id,
+                            early_stopping=True,
+                        )
+                    else:
+                        # Sampling with temperature
+                        outputs = self.model.generate(
+                            **inputs,
+                            max_new_tokens=max_tokens,
+                            do_sample=True,
+                            temperature=temperature,
+                            top_p=config.get("top_p", 0.9),
+                            pad_token_id=self.tokenizer.eos_token_id,
+                        )
+
+                inference_end = time.perf_counter()
+                elapsed_ms = (inference_end - inference_start) * 1000
+
+                if end_time:
+                    end_time.record()
+                    torch.cuda.synchronize()
+                    gpu_elapsed = start_time.elapsed_time(end_time)
+                    span.set_attribute("inference.gpu_time_ms", gpu_elapsed)
+
+                    if gpu_elapsed / 1000.0 > timeout_seconds:
+                        logger.warning(
+                            "generate.timeout_warning",
+                            elapsed_seconds=gpu_elapsed / 1000.0,
+                            timeout=timeout_seconds
+                        )
+
+                # Calculate tokens generated
+                output_token_count = outputs.shape[1]
+                tokens_generated = output_token_count - input_token_count
+
+                # Record metrics
+                span.set_attribute("tokens.output", output_token_count)
+                span.set_attribute("tokens.generated", tokens_generated)
+                span.set_attribute("inference.latency_ms", elapsed_ms)
+
+                # Calculate token generation rate (tokens/second)
+                if elapsed_ms > 0:
+                    tokens_per_second = (tokens_generated * 1000) / elapsed_ms
+                    span.set_attribute("tokens.per_second", tokens_per_second)
+
+                # Record metrics
+                token_generation_counter.add(tokens_generated, attributes={"model": self.model_name})
+                inference_latency_histogram.record(elapsed_ms, attributes={"model": self.model_name})
+
+                # Record GPU memory after inference
+                if torch.cuda.is_available():
+                    gpu_memory_after = torch.cuda.memory_allocated() / (1024 ** 2)  # MB
+                    gpu_memory_peak = torch.cuda.max_memory_allocated() / (1024 ** 2)  # MB
+                    span.set_attribute("gpu.memory_after_mb", gpu_memory_after)
+                    span.set_attribute("gpu.memory_peak_mb", gpu_memory_peak)
+                    span.set_attribute("gpu.memory_delta_mb", gpu_memory_after - gpu_memory_before)
+
+                # Decode
+                generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+                # Extract only the answer part (after "Answer:")
+                if "Answer:" in generated_text:
+                    answer_text = generated_text.split("Answer:")[-1].strip()
                 else:
-                    # Sampling with temperature
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=max_tokens,
-                        do_sample=True,
-                        temperature=temperature,
-                        top_p=config.get("top_p", 0.9),
-                        pad_token_id=self.tokenizer.eos_token_id,
-                    )
+                    answer_text = generated_text[len(prompt) :].strip()
 
-            if end_time:
-                end_time.record()
-                torch.cuda.synchronize()
-                elapsed = start_time.elapsed_time(end_time) / 1000.0  # Convert to seconds
-                if elapsed > timeout_seconds:
-                    logger.warning(
-                        "generate.timeout_warning",
-                        elapsed_seconds=elapsed,
-                        timeout=timeout_seconds
-                    )
+                span.set_attribute("output.text_length", len(answer_text))
+                span.set_status(Status(StatusCode.OK))
 
-            # Decode
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                logger.info(
+                    "generate.success",
+                    prompt_length=len(prompt),
+                    output_length=len(answer_text),
+                    tokens_generated=tokens_generated,
+                    inference_latency_ms=elapsed_ms
+                )
 
-            # Extract only the answer part (after "Answer:")
-            if "Answer:" in generated_text:
-                answer_text = generated_text.split("Answer:")[-1].strip()
-            else:
-                answer_text = generated_text[len(prompt) :].strip()
+                return answer_text
 
-            logger.info(
-                "generate.success",
-                prompt_length=len(prompt),
-                output_length=len(answer_text)
-            )
+            except torch.cuda.OutOfMemoryError as e:
+                span.set_status(Status(StatusCode.ERROR, "CUDA OOM"))
+                span.record_exception(e)
+                error_counter.add(1, attributes={"model": self.model_name, "error_type": "cuda_oom"})
 
-            return answer_text
+                logger.error(
+                    "generate.cuda_oom",
+                    prompt_length=len(prompt),
+                    max_tokens=max_tokens,
+                    error=str(e)
+                )
+                # Clear CUDA cache and retry
+                torch.cuda.empty_cache()
+                raise
 
-        except torch.cuda.OutOfMemoryError as e:
-            logger.error(
-                "generate.cuda_oom",
-                prompt_length=len(prompt),
-                max_tokens=max_tokens,
-                error=str(e)
-            )
-            # Clear CUDA cache and retry
-            torch.cuda.empty_cache()
-            raise
+            except RuntimeError as e:
+                span.set_status(Status(StatusCode.ERROR, "Runtime error"))
+                span.record_exception(e)
+                error_counter.add(1, attributes={"model": self.model_name, "error_type": "runtime_error"})
 
-        except RuntimeError as e:
-            logger.error(
-                "generate.runtime_error",
-                prompt_length=len(prompt),
-                error=str(e)
-            )
-            raise
+                logger.error(
+                    "generate.runtime_error",
+                    prompt_length=len(prompt),
+                    error=str(e)
+                )
+                raise
 
-        except Exception as e:
-            logger.error(
-                "generate.unexpected_error",
-                prompt_length=len(prompt),
-                error_type=type(e).__name__,
-                error=str(e)
-            )
-            # Fallback: return a minimal response
-            return "Unable to generate response due to technical error."
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                error_counter.add(1, attributes={"model": self.model_name, "error_type": type(e).__name__})
+
+                logger.error(
+                    "generate.unexpected_error",
+                    prompt_length=len(prompt),
+                    error_type=type(e).__name__,
+                    error=str(e)
+                )
+                # Fallback: return a minimal response
+                return "Unable to generate response due to technical error."
 
     def _segment_sentences(self, text: str) -> List[str]:
         """
