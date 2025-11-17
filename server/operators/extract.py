@@ -165,26 +165,135 @@ class ExtractConstraintsOperator(BaseOperator):
         self, nl_text: str, error: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Synthesize a predicate from natural language constraint.
+        Synthesize an executable predicate from natural language constraint.
 
         Args:
             nl_text: Natural language constraint
             error: Error dictionary
 
         Returns:
-            Predicate dictionary
+            Predicate dictionary with executable components
         """
         error_type = error.get("type", "unknown")
+        excerpt = error.get("excerpt", "")
 
-        # Simple predicate synthesis based on error type
-        # In production, use more sophisticated predicate DSL
-        predicate = {
-            "type": error_type,
-            "operator": "must_not" if "avoid" in nl_text.lower() else "must",
-            "condition": nl_text,
-        }
+        # Determine operator based on language
+        operator = "must_not" if any(word in nl_text.lower() for word in ["avoid", "prevent", "don't", "never"]) else "must"
+
+        # Create structured predicate based on error type
+        if error_type == "contradiction":
+            predicate = {
+                "type": "logical_consistency",
+                "operator": operator,
+                "condition": {
+                    "check": "no_contradiction",
+                    "method": "nli_entailment",
+                    "threshold": 0.9,
+                },
+                "description": nl_text,
+                "executable": True,
+                "checker_function": "verify_no_contradictions",
+            }
+
+        elif error_type == "constraint_violation":
+            predicate = {
+                "type": "requirement_satisfaction",
+                "operator": "must",
+                "condition": {
+                    "check": "requirement_met",
+                    "method": "semantic_similarity",
+                    "target": excerpt,
+                    "threshold": 0.85,
+                },
+                "description": nl_text,
+                "executable": True,
+                "checker_function": "verify_requirement_coverage",
+            }
+
+        elif error_type == "insufficient_reasoning":
+            predicate = {
+                "type": "completeness",
+                "operator": "must",
+                "condition": {
+                    "check": "min_sentence_count",
+                    "method": "structural",
+                    "min_value": 3,
+                },
+                "description": nl_text,
+                "executable": True,
+                "checker_function": "verify_min_sentences",
+            }
+
+        elif error_type == "circular_reasoning":
+            predicate = {
+                "type": "logical_consistency",
+                "operator": "must_not",
+                "condition": {
+                    "check": "no_circular_logic",
+                    "method": "semantic_similarity",
+                    "max_similarity": 0.95,
+                },
+                "description": nl_text,
+                "executable": True,
+                "checker_function": "verify_no_circular_reasoning",
+            }
+
+        elif error_type == "vague_language":
+            evidence = error.get("evidence", [])
+            vague_terms = evidence[0].get("vague_terms", []) if evidence else []
+            predicate = {
+                "type": "precision",
+                "operator": "must_not",
+                "condition": {
+                    "check": "no_vague_terms",
+                    "method": "keyword_matching",
+                    "forbidden_terms": vague_terms or ["maybe", "possibly", "might", "could"],
+                },
+                "description": nl_text,
+                "executable": True,
+                "checker_function": "verify_no_vague_language",
+            }
+
+        else:
+            # Generic fallback with limited executability
+            predicate = {
+                "type": "general",
+                "operator": operator,
+                "condition": {
+                    "check": "custom",
+                    "method": "manual_review",
+                    "description": nl_text,
+                },
+                "description": nl_text,
+                "executable": False,
+                "checker_function": None,
+            }
+
+        # Add metadata for potential Z3/PySAT integration
+        predicate["z3_ready"] = error_type in ["contradiction", "circular_reasoning"]
+        predicate["sat_encoding"] = self._generate_sat_encoding_hint(error_type, operator)
 
         return predicate
+
+    def _generate_sat_encoding_hint(self, error_type: str, operator: str) -> Optional[str]:
+        """
+        Generate hints for SAT encoding of predicates.
+
+        Args:
+            error_type: Type of error
+            operator: Operator (must/must_not)
+
+        Returns:
+            SAT encoding hint or None
+        """
+        if error_type == "contradiction":
+            return "¬(P ∧ ¬P)" if operator == "must_not" else "P ∧ ¬P"
+        elif error_type == "circular_reasoning":
+            return "¬(P → P)" if operator == "must_not" else "P → P"
+        elif error_type == "constraint_violation":
+            return "C → R"  # Constraint implies requirement
+        else:
+            return None
 
     def _infer_constraint_type(self, error: Dict[str, Any]) -> str:
         """

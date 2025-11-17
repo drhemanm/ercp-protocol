@@ -66,3 +66,4 @@ tenacity==8.2.3
 pyyaml==6.0.1
 click==8.1.7
 tqdm==4.66.1
+psutil==5.9.6

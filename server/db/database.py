@@ -21,13 +21,21 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+asyncpg://ercp_user:ercp_pass@localhost:5432/ercp"
 )
 
-# Create async engine
+# Create async engine with production-ready connection pool settings
 engine = create_async_engine(
     DATABASE_URL,
     echo=os.getenv("ENVIRONMENT", "development") == "development",
     pool_size=int(os.getenv("DB_POOL_SIZE", "20")),
     max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
     poolclass=NullPool if "sqlite" in DATABASE_URL else None,
+    # Connection timeout - fail fast instead of hanging
+    pool_timeout=float(os.getenv("DB_POOL_TIMEOUT", "30")),
+    # Recycle connections hourly to prevent stale connections
+    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "3600")),
+    # Test connections before use to ensure they're healthy
+    pool_pre_ping=True,
+    # Enable query echo in development only
+    echo_pool=os.getenv("ENVIRONMENT", "development") == "development",
 )
 
 # Create async session factory

@@ -43,6 +43,9 @@ from server.middleware import (
 from server.logging import logger, setup_logging
 from server.metrics import metrics_endpoint, record_ercp_run, active_ercp_runs
 
+# Import safeguards
+from server.utils import ResourceMonitor, IterationGuard
+
 # Setup logging
 setup_logging()
 
@@ -190,12 +193,22 @@ async def run_ercp(
         extractor = ExtractConstraintsOperator()
         stabilizer = StabilizeOperator()
 
+        # Initialize safeguards
+        resource_monitor = ResourceMonitor(max_memory_percent=85.0, max_cpu_percent=95.0)
+        iteration_guard = IterationGuard(
+            max_iterations=req.config.max_iterations,
+            max_duration_seconds=600.0  # 10 minutes max
+        )
+
         # Run ERCP loop
         prev_reasoning = None
         constraints_accum = []
         iteration = 0
 
         for iteration in range(req.config.max_iterations):
+            # Check iteration and resource limits
+            iteration_guard.check(iteration)
+            resource_monitor.enforce_limits()
             logger.info(
                 "ercp.iteration.start",
                 trace_id=trace_id,

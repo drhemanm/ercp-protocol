@@ -5,10 +5,19 @@ Uses transformer models for reasoning generation with constraint injection.
 
 import uuid
 import re
+import asyncio
 from typing import List, Dict, Any, Optional
 import torch
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
 from .base import BaseOperator
 from server.models.model_registry import model_registry
+from server.logging import logger
 
 
 class GenerateOperator(BaseOperator):
@@ -109,9 +118,15 @@ class GenerateOperator(BaseOperator):
 
         return "\n".join(prompt_parts)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((RuntimeError, ConnectionError)),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+    )
     def _generate_text(self, prompt: str, config: Dict[str, Any]) -> str:
         """
-        Generate text using the LLM.
+        Generate text using the LLM with retries and error handling.
 
         Args:
             prompt: Input prompt
@@ -119,10 +134,16 @@ class GenerateOperator(BaseOperator):
 
         Returns:
             Generated text
+
+        Raises:
+            torch.cuda.OutOfMemoryError: If GPU runs out of memory
+            TimeoutError: If generation exceeds timeout
+            RuntimeError: If model generation fails
         """
         max_tokens = config.get("max_tokens", 500)
         temperature = config.get("temperature", 0.0)
         deterministic = config.get("deterministic", True)
+        timeout_seconds = config.get("generation_timeout", 60.0)
 
         # Set seed for deterministic generation
         if deterministic:
@@ -130,45 +151,98 @@ class GenerateOperator(BaseOperator):
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(42)
 
-        # Tokenize input
-        inputs = self.tokenizer(
-            prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048
-        )
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        try:
+            # Tokenize input
+            inputs = self.tokenizer(
+                prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048
+            )
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
-        # Generate
-        with torch.no_grad():
-            if temperature == 0.0:
-                # Greedy decoding
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_tokens,
-                    do_sample=False,
-                    num_beams=1,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    early_stopping=True,
-                )
+            # Generate with timeout protection
+            start_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+            end_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+
+            if start_time:
+                start_time.record()
+
+            with torch.no_grad():
+                if temperature == 0.0:
+                    # Greedy decoding
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_tokens,
+                        do_sample=False,
+                        num_beams=1,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                        early_stopping=True,
+                    )
+                else:
+                    # Sampling with temperature
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=max_tokens,
+                        do_sample=True,
+                        temperature=temperature,
+                        top_p=config.get("top_p", 0.9),
+                        pad_token_id=self.tokenizer.eos_token_id,
+                    )
+
+            if end_time:
+                end_time.record()
+                torch.cuda.synchronize()
+                elapsed = start_time.elapsed_time(end_time) / 1000.0  # Convert to seconds
+                if elapsed > timeout_seconds:
+                    logger.warning(
+                        "generate.timeout_warning",
+                        elapsed_seconds=elapsed,
+                        timeout=timeout_seconds
+                    )
+
+            # Decode
+            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # Extract only the answer part (after "Answer:")
+            if "Answer:" in generated_text:
+                answer_text = generated_text.split("Answer:")[-1].strip()
             else:
-                # Sampling with temperature
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_tokens,
-                    do_sample=True,
-                    temperature=temperature,
-                    top_p=config.get("top_p", 0.9),
-                    pad_token_id=self.tokenizer.eos_token_id,
-                )
+                answer_text = generated_text[len(prompt) :].strip()
 
-        # Decode
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            logger.info(
+                "generate.success",
+                prompt_length=len(prompt),
+                output_length=len(answer_text)
+            )
 
-        # Extract only the answer part (after "Answer:")
-        if "Answer:" in generated_text:
-            answer_text = generated_text.split("Answer:")[-1].strip()
-        else:
-            answer_text = generated_text[len(prompt) :].strip()
+            return answer_text
 
-        return answer_text
+        except torch.cuda.OutOfMemoryError as e:
+            logger.error(
+                "generate.cuda_oom",
+                prompt_length=len(prompt),
+                max_tokens=max_tokens,
+                error=str(e)
+            )
+            # Clear CUDA cache and retry
+            torch.cuda.empty_cache()
+            raise
+
+        except RuntimeError as e:
+            logger.error(
+                "generate.runtime_error",
+                prompt_length=len(prompt),
+                error=str(e)
+            )
+            raise
+
+        except Exception as e:
+            logger.error(
+                "generate.unexpected_error",
+                prompt_length=len(prompt),
+                error_type=type(e).__name__,
+                error=str(e)
+            )
+            # Fallback: return a minimal response
+            return "Unable to generate response due to technical error."
 
     def _segment_sentences(self, text: str) -> List[str]:
         """
