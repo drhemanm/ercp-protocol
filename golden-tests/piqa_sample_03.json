@@ -1,0 +1,18 @@
+{
+  "problem_id": "piqa-003",
+  "description": "To test if water is boiling, you should: A) Touch the water with your finger B) Look for bubbles",
+  "expected_answer": "B",
+  "expected_reasoning_contains": [
+    "bubbles",
+    "safe",
+    "temperature",
+    "100"
+  ],
+  "expected_constraints": [
+    "Must prioritize safety"
+  ],
+  "metadata": {
+    "difficulty": "easy",
+    "topic": "safety"
+  }
+}

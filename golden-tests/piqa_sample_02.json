@@ -1,0 +1,18 @@
+{
+  "problem_id": "piqa-002",
+  "description": "To make ice melt faster, you should: A) Add salt B) Put it in the freezer",
+  "expected_answer": "A",
+  "expected_reasoning_contains": [
+    "salt",
+    "lower",
+    "freezing point",
+    "melting"
+  ],
+  "expected_constraints": [
+    "Answer must be A or B"
+  ],
+  "metadata": {
+    "difficulty": "easy",
+    "topic": "physics"
+  }
+}

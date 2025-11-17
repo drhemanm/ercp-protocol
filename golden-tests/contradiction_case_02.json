@@ -1,0 +1,15 @@
+{
+  "problem_id": "contradiction-002",
+  "description": "Describe the properties of ice",
+  "reasoning_with_error": "Ice is less dense than water. This is why ice floats on water. Ice is more dense than water.",
+  "expected_errors": [
+    {
+      "type": "contradiction",
+      "span": [0, 2],
+      "confidence_min": 0.70
+    }
+  ],
+  "metadata": {
+    "error_type": "factual_contradiction"
+  }
+}

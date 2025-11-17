@@ -1,0 +1,19 @@
+{
+  "problem_id": "piqa-001",
+  "description": "To remove rust from metal, you should: A) Apply lemon juice B) Apply motor oil",
+  "expected_answer": "A",
+  "expected_reasoning_contains": [
+    "citric acid",
+    "rust",
+    "iron oxide",
+    "chemical reaction"
+  ],
+  "expected_constraints": [
+    "Answer must be A or B",
+    "Must explain chemical mechanism"
+  ],
+  "metadata": {
+    "difficulty": "medium",
+    "topic": "chemistry"
+  }
+}
