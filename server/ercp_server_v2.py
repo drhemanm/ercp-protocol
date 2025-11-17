@@ -175,14 +175,20 @@ class RunRequest(BaseModel):
 # Health & Metrics
 # ============================
 
-
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint with database status."""
+    from server.db.database import check_db_health
+    
+    db_health = await check_db_health()
+    
+    overall_status = "healthy" if db_health["status"] == "healthy" else "degraded"
+    
     return {
-        "status": "healthy",
+        "status": overall_status,
         "version": "2.0",
         "environment": os.getenv("ENVIRONMENT", "development"),
+        "database": db_health,
     }
 
 
