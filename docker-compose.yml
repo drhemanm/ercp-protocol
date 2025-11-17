@@ -51,9 +51,10 @@ services:
       REDIS_URL: redis://redis:6379/0
 
       # Security
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
-      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-this-in-production}
-
+      # Security (NO DEFAULTS - must be set in .env file)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env file}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?APP_SECRET_KEY must be set in .env file}
+     
       # Application
       ENVIRONMENT: ${ENVIRONMENT:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
