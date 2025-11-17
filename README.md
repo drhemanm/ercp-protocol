@@ -41,5 +41,5 @@ robust, interpretable, and auditable reasoning behavior from LLMs.
 
 1. Clone repo:
 ```bash
-git clone git@github.com:<your-org>/ercp-protocol.git
+git clone git@github.com/drhemanm/ercp-protocol.git
 cd ercp-protocol
