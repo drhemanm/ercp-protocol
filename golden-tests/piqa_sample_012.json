@@ -1,0 +1,47 @@
+{
+  "id": "piqa_012",
+  "problem": {
+    "question": "To check if your car tire pressure is low, you should:",
+    "options": [
+      "Press down on the tire with your hand - if it feels soft and depresses easily, pressure is low.",
+      "Use a tire pressure gauge to measure the exact PSI and compare to recommended pressure."
+    ],
+    "correct_answer": 1,
+    "category": "automotive",
+    "difficulty": "easy"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Tire pressure requires precise measurement in PSI",
+      "Human touch is subjective and imprecise",
+      "Tire pressure gauge provides objective numerical reading",
+      "Safety depends on accurate pressure measurement"
+    ],
+    "constraints": [
+      {
+        "type": "precision",
+        "description": "Tire pressure must be measured accurately for safety",
+        "priority": "critical"
+      },
+      {
+        "type": "safety",
+        "description": "Incorrect pressure affects braking and handling",
+        "priority": "critical"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["gauge", "measurement", "PSI", "precise"],
+    "must_not_contain": ["hand feel sufficient", "touch is accurate"],
+    "logic_requirements": [
+      "Explains need for precise measurement",
+      "Identifies limitations of subjective hand test",
+      "Mentions safety implications"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "automotive", "measurement", "safety"]
+  }
+}

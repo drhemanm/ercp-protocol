@@ -1,0 +1,46 @@
+{
+  "id": "piqa_004",
+  "problem": {
+    "question": "To prevent a bracelet from sliding off your wrist when it's too loose, you can:",
+    "options": [
+      "Wrap a small rubber band around the clasp to create friction and prevent sliding.",
+      "Wrap a small paper clip around the clasp to create friction and prevent sliding."
+    ],
+    "correct_answer": 0,
+    "category": "fashion",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Friction is needed to prevent sliding",
+      "Rubber has high coefficient of friction",
+      "Paper clip is smooth metal with low friction",
+      "Rubber band is flexible and conforms to wrist shape"
+    ],
+    "constraints": [
+      {
+        "type": "material_property",
+        "description": "Material must have high friction coefficient",
+        "priority": "critical"
+      },
+      {
+        "type": "mechanical",
+        "description": "Solution must be flexible to accommodate wrist movement",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["friction", "rubber", "grip"],
+    "must_not_contain": ["paper clip creates friction", "metal is sticky"],
+    "logic_requirements": [
+      "Compares friction properties of rubber vs metal",
+      "Explains why rubber provides better grip"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "friction", "materials"]
+  }
+}

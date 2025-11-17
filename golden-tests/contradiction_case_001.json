@@ -1,0 +1,56 @@
+{
+  "id": "contradiction_001",
+  "problem": {
+    "premise": "All birds can fly. Penguins are birds.",
+    "hypothesis": "Penguins cannot fly.",
+    "expected_label": "contradiction",
+    "difficulty": "easy"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract universal claim from premise",
+      "constraint": "All birds can fly → ∀x (Bird(x) → CanFly(x))"
+    },
+    "step_2": {
+      "description": "Extract specific instance",
+      "constraint": "Penguins are birds → Bird(Penguin)"
+    },
+    "step_3": {
+      "description": "Apply logical inference",
+      "constraint": "By modus ponens: Bird(Penguin) ∧ (Bird(x) → CanFly(x)) ⊢ CanFly(Penguin)"
+    },
+    "step_4": {
+      "description": "Compare with hypothesis",
+      "constraint": "Hypothesis states: ¬CanFly(Penguin)"
+    },
+    "step_5": {
+      "description": "Detect contradiction",
+      "constraint": "CanFly(Penguin) ∧ ¬CanFly(Penguin) is logically contradictory"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Universal quantification over birds",
+      "Penguin instance membership",
+      "Flying ability negation"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "logical_contradiction",
+        "span": "premise vs hypothesis",
+        "confidence": 1.0
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "universal claim",
+      "specific instance",
+      "logical contradiction"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["logical_reasoning", "contradiction", "universal_quantification"]
+  }
+}

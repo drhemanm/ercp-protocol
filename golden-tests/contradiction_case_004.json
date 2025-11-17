@@ -1,0 +1,57 @@
+{
+  "id": "contradiction_004",
+  "problem": {
+    "premise": "Every student in the class passed the final exam. John is a student in the class.",
+    "hypothesis": "John failed the final exam.",
+    "expected_label": "contradiction",
+    "difficulty": "easy"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract universal quantification",
+      "constraint": "∀x (StudentInClass(x) → PassedExam(x))"
+    },
+    "step_2": {
+      "description": "Extract specific instance",
+      "constraint": "StudentInClass(John)"
+    },
+    "step_3": {
+      "description": "Apply universal instantiation",
+      "constraint": "StudentInClass(John) ∧ (StudentInClass(x) → PassedExam(x)) ⊢ PassedExam(John)"
+    },
+    "step_4": {
+      "description": "Compare with hypothesis",
+      "constraint": "Hypothesis: FailedExam(John) ≡ ¬PassedExam(John)"
+    },
+    "step_5": {
+      "description": "Identify logical contradiction",
+      "constraint": "PassedExam(John) ∧ ¬PassedExam(John) → ⊥"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Universal quantification over students",
+      "Set membership (John in class)",
+      "Exam outcome binary property"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "logical_contradiction",
+        "span": "passed vs failed",
+        "confidence": 1.0
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "universal claim",
+      "specific instance",
+      "modus ponens",
+      "contradiction"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["logical_reasoning", "contradiction", "universal_quantification", "modus_ponens"]
+  }
+}

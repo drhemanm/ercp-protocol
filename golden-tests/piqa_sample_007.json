@@ -1,0 +1,46 @@
+{
+  "id": "piqa_007",
+  "problem": {
+    "question": "How can you prevent your glasses from fogging up when wearing a mask?",
+    "options": [
+      "Wash your glasses with soapy water and let them air dry, leaving a thin film that prevents condensation.",
+      "Rub your glasses with a dry cloth to create static that prevents condensation."
+    ],
+    "correct_answer": 0,
+    "category": "daily_life",
+    "difficulty": "medium"
+  },
+  "expected_reasoning": {
+    "key_steps": [
+      "Fogging is caused by water vapor condensing on cold surface",
+      "Soap creates hydrophilic layer that spreads water evenly",
+      "Thin soap film prevents droplet formation",
+      "Static electricity doesn't prevent condensation"
+    ],
+    "constraints": [
+      {
+        "type": "chemistry",
+        "description": "Solution must alter surface tension or hydrophobicity",
+        "priority": "critical"
+      },
+      {
+        "type": "physics",
+        "description": "Static electricity doesn't affect water vapor condensation",
+        "priority": "high"
+      }
+    ]
+  },
+  "verification_criteria": {
+    "must_mention": ["soap", "film", "condensation", "water vapor"],
+    "must_not_contain": ["static prevents fog", "dry cloth stops moisture"],
+    "logic_requirements": [
+      "Explains mechanism of anti-fog soap coating",
+      "Understands why static electricity is ineffective"
+    ]
+  },
+  "metadata": {
+    "source": "PIQA dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "chemistry", "condensation"]
+  }
+}

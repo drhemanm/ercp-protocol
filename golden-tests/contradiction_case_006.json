@@ -1,0 +1,56 @@
+{
+  "id": "contradiction_006",
+  "problem": {
+    "premise": "The store opens at 9 AM and closes at 5 PM. It is currently 7 PM.",
+    "hypothesis": "Customers can shop at the store right now.",
+    "expected_label": "contradiction",
+    "difficulty": "easy"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract operational hours constraint",
+      "constraint": "OperationalHours(store, 9AM, 5PM) → Open(store, t) ↔ (t ≥ 9AM ∧ t ≤ 5PM)"
+    },
+    "step_2": {
+      "description": "Extract current time",
+      "constraint": "CurrentTime(7PM)"
+    },
+    "step_3": {
+      "description": "Evaluate store status",
+      "constraint": "7PM > 5PM → ¬Open(store, 7PM)"
+    },
+    "step_4": {
+      "description": "Check shopping prerequisite",
+      "constraint": "CanShop(customer, store, t) → Open(store, t)"
+    },
+    "step_5": {
+      "description": "Identify impossibility",
+      "constraint": "¬Open(store, 7PM) → ¬CanShop(customer, store, 7PM)"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Operational hours constraint",
+      "Temporal comparison",
+      "Prerequisite for shopping"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "temporal_constraint_violation",
+        "span": "store closed at current time",
+        "confidence": 1.0
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "operational hours",
+      "current time",
+      "store closed"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["temporal_reasoning", "contradiction", "operational_constraints"]
+  }
+}

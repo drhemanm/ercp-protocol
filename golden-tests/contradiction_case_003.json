@@ -1,0 +1,61 @@
+{
+  "id": "contradiction_003",
+  "problem": {
+    "premise": "The temperature is below freezing. Water is in liquid form.",
+    "hypothesis": "The water is ice.",
+    "expected_label": "contradiction",
+    "difficulty": "medium"
+  },
+  "reasoning_steps": {
+    "step_1": {
+      "description": "Extract temperature constraint",
+      "constraint": "Temperature < 0°C → BelowFreezing(temp)"
+    },
+    "step_2": {
+      "description": "Extract current state",
+      "constraint": "Water in liquid form → State(water, liquid)"
+    },
+    "step_3": {
+      "description": "Apply physical law",
+      "constraint": "Below freezing + liquid state is contradictory unless: Pressure(high) ∨ Impurities(present) ∨ Supercooled(true)"
+    },
+    "step_4": {
+      "description": "Analyze hypothesis",
+      "constraint": "Hypothesis states: State(water, ice) but premise states: State(water, liquid)"
+    },
+    "step_5": {
+      "description": "Detect state contradiction",
+      "constraint": "State(water, ice) ∧ State(water, liquid) is contradictory"
+    }
+  },
+  "verification_criteria": {
+    "must_extract_constraints": [
+      "Temperature threshold constraint",
+      "Phase state constraint",
+      "Physical law regarding phase transitions"
+    ],
+    "must_detect_errors": [
+      {
+        "type": "state_contradiction",
+        "span": "liquid vs ice",
+        "confidence": 0.90
+      },
+      {
+        "type": "physical_law_violation",
+        "span": "liquid water below freezing (unless special conditions)",
+        "confidence": 0.85
+      }
+    ],
+    "convergence_expected": true,
+    "final_reasoning_should_mention": [
+      "phase state",
+      "freezing point",
+      "contradiction"
+    ]
+  },
+  "metadata": {
+    "source": "NLI contradiction dataset",
+    "created_at": "2025-11-17T09:30:00Z",
+    "tags": ["physical_reasoning", "contradiction", "phase_transitions"]
+  }
+}
