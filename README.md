@@ -30,6 +30,25 @@ ERCP is a meta-reasoning protocol that iteratively improves LLM outputs through:
 - 🐳 **Deployment**: Docker, Kubernetes, CI/CD pipelines
 - 🧪 **Testing**: Unit, integration, and golden test suites
 
+## Server Implementations
+
+This repository includes two server implementations:
+
+### Production Server (`ercp_server_v2.py`)
+- **Use this for production deployments**
+- Full ML operator integration (real models)
+- Database persistence with PostgreSQL
+- Metrics, logging, and monitoring
+- Security middleware and authentication
+- **Start with:** `uvicorn server.ercp_server_v2:app`
+
+### Reference Server (`ercp_server.py`)
+- Lightweight reference implementation
+- Stub operators for API contract testing
+- No ML dependencies required
+- Useful for development and documentation
+- **Start with:** `uvicorn server.ercp_server:app`
+
 ## 🚀 Quick Start
 
 ### Prerequisites
