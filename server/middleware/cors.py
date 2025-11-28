@@ -20,6 +20,28 @@ def get_cors_origins():
     return origins
 
 
+def get_cors_headers():
+    """
+    Get allowed CORS headers from environment.
+
+    Returns:
+        List of allowed headers
+    """
+    default_headers = [
+        "Authorization",
+        "Content-Type",
+        "X-Request-ID",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ]
+    headers_env = os.getenv("CORS_ALLOWED_HEADERS", "")
+    if headers_env:
+        custom_headers = [h.strip() for h in headers_env.split(",") if h.strip()]
+        return default_headers + custom_headers
+    return default_headers
+
+
 def add_cors_middleware(app):
     """
     Add CORS middleware to FastAPI app.
@@ -33,6 +55,6 @@ def add_cors_middleware(app):
         allow_credentials=os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower()
         == "true",
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-        expose_headers=["X-Total-Count", "X-Page-Number"],
+        allow_headers=get_cors_headers(),
+        expose_headers=["X-Total-Count", "X-Page-Number", "X-Request-ID"],
     )
