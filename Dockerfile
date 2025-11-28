@@ -1,7 +1,7 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 LABEL maintainer="EvoLogics AI Lab <team@evologics.ai>"
-LABEL description="ERCP Protocol Reference Server - Production Ready"
+LABEL description="ERCP Protocol Server - Production Ready"
 
 WORKDIR /app
 
@@ -40,5 +40,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "server.ercp_server:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+# Run the production server (ercp_server_v2)
+# Use ercp_server for lightweight reference implementation
+CMD ["uvicorn", "server.ercp_server_v2:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]

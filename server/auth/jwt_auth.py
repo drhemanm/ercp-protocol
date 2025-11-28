@@ -22,8 +22,8 @@ if not SECRET_KEY:
 
 if len(SECRET_KEY) < 32:
     raise RuntimeError(
-        "JWT_SECRET_KEY must be at least 32 characters long. "
-        "Current length: {len(SECRET_KEY)}"
+        f"JWT_SECRET_KEY must be at least 32 characters long. "
+        f"Current length: {len(SECRET_KEY)}"
     )
 
 ALGORITHM = "HS256"
@@ -37,6 +37,7 @@ class TokenData(BaseModel):
 
     user_id: Optional[str] = None
     exp: Optional[datetime] = None
+    roles: list[str] = []  # User roles from JWT claims
 
 
 def create_access_token(
@@ -91,7 +92,16 @@ def verify_token(token: str) -> TokenData:
         if user_id is None:
             raise credentials_exception
 
-        token_data = TokenData(user_id=user_id, exp=payload.get("exp"))
+        # Extract roles from JWT claims (default to empty list)
+        roles = payload.get("roles", [])
+        if not isinstance(roles, list):
+            roles = []
+
+        token_data = TokenData(
+            user_id=user_id,
+            exp=payload.get("exp"),
+            roles=roles,
+        )
         return token_data
 
     except JWTError:
@@ -100,7 +110,7 @@ def verify_token(token: str) -> TokenData:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> str:
+) -> TokenData:
     """
     Dependency to get current authenticated user.
 
@@ -108,7 +118,7 @@ async def get_current_user(
         credentials: Bearer token credentials
 
     Returns:
-        User ID from token
+        TokenData with user info and roles
 
     Raises:
         HTTPException: If authentication fails
@@ -116,31 +126,54 @@ async def get_current_user(
     token = credentials.credentials
     token_data = verify_token(token)
 
-    return token_data.user_id
+    return token_data
 
 
-# Optional: Admin-only dependency
+def require_role(required_role: str):
+    """
+    Factory function to create role-checking dependencies.
+
+    Args:
+        required_role: Role name required for access
+
+    Returns:
+        Dependency function that checks for the required role
+    """
+    async def role_checker(
+        token_data: TokenData = Depends(get_current_user),
+    ) -> TokenData:
+        if required_role not in token_data.roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required role: {required_role}",
+            )
+        return token_data
+
+    return role_checker
+
+
+# Admin-only dependency using proper role-based access control
 async def get_current_admin_user(
-    user_id: str = Depends(get_current_user),
-) -> str:
+    token_data: TokenData = Depends(get_current_user),
+) -> TokenData:
     """
     Dependency for admin-only endpoints.
 
+    Checks for 'admin' role in JWT claims.
+
     Args:
-        user_id: Current user ID
+        token_data: Token data from authenticated user
 
     Returns:
-        Admin user ID
+        TokenData for admin user
 
     Raises:
-        HTTPException: If user is not an admin
+        HTTPException: If user does not have admin role
     """
-    # In production, check user role from database
-    # For now, simple check
-    if not user_id.startswith("admin_"):
+    if "admin" not in token_data.roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Admin access required. User does not have admin role.",
         )
 
-    return user_id
+    return token_data

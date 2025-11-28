@@ -605,12 +605,22 @@ async def run_ercp(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler."""
+    # Log the full error details server-side for debugging
     logger.error(
-        "http.error", path=request.url.path, method=request.method, error=str(exc)
+        "http.error",
+        path=request.url.path,
+        method=request.method,
+        error=str(exc),
+        error_type=type(exc).__name__,
     )
 
+    # Return generic error to client to prevent information disclosure
     return JSONResponse(
-        status_code=500, content={"error": "internal_server_error", "detail": str(exc)}
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "detail": "An unexpected error occurred. Please try again later.",
+        },
     )
 
 

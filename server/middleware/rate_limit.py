@@ -46,7 +46,8 @@ def get_composite_rate_limit_key(request: Request) -> str:
     auth_hash = hashlib.sha256(auth_header.encode()).hexdigest()[:16] if auth_header else "anon"
 
     # Combine factors with hashing to prevent enumeration
-    composite = f"{ip}:{hashlib.md5(user_agent.encode()).hexdigest()[:8]}:{auth_hash}"
+    # Using SHA256 for consistency with security best practices
+    composite = f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:16]}:{auth_hash}"
 
     return composite
 

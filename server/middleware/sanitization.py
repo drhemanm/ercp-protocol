@@ -72,7 +72,8 @@ class SanitizationMiddleware(BaseHTTPMiddleware):
         r"(?i);[\s\._-]*drop[\s\._-]*(?:table|database)",
         r"(?i)union[\s\._-]*(?:all[\s\._-]*)?select",
         r"(?i)insert[\s\._-]*into[\s\._-]*\w+[\s\._-]*values",
-        r"(?i)--[\s\._-]*$",  # SQL comment
+        # SQL comment injection - must follow a quote or semicolon to reduce false positives
+        r"(?i)[';\)]\s*--\s*(?:$|[^\w])",
 
         # Command injection
         r"(?i)[;&|`$]\s*(?:ls|cat|pwd|whoami|id|uname)",
