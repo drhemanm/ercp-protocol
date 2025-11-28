@@ -5,6 +5,7 @@ Provides token-based authentication for API endpoints.
 
 import os
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -12,24 +13,40 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 
 # JWT Configuration
-# JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if not SECRET_KEY:
-    raise RuntimeError(
-        "JWT_SECRET_KEY environment variable is required. "
-        "Generate one with: openssl rand -hex 32"
-    )
-
-if len(SECRET_KEY) < 32:
-    raise RuntimeError(
-        f"JWT_SECRET_KEY must be at least 32 characters long. "
-        f"Current length: {len(SECRET_KEY)}"
-    )
-
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
 
 security = HTTPBearer()
+
+
+@lru_cache(maxsize=1)
+def get_secret_key() -> str:
+    """
+    Get and validate the JWT secret key.
+
+    Uses lazy evaluation to allow module import without JWT_SECRET_KEY set
+    (e.g., during CI testing, Docker builds). Validation happens on first use.
+
+    Returns:
+        The validated secret key
+
+    Raises:
+        RuntimeError: If JWT_SECRET_KEY is not set or too short
+    """
+    secret_key = os.getenv("JWT_SECRET_KEY")
+    if not secret_key:
+        raise RuntimeError(
+            "JWT_SECRET_KEY environment variable is required. "
+            "Generate one with: openssl rand -hex 32"
+        )
+
+    if len(secret_key) < 32:
+        raise RuntimeError(
+            f"JWT_SECRET_KEY must be at least 32 characters long. "
+            f"Current length: {len(secret_key)}"
+        )
+
+    return secret_key
 
 
 class TokenData(BaseModel):
@@ -61,7 +78,7 @@ def create_access_token(
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
 
     return encoded_jwt
 
@@ -86,7 +103,7 @@ def verify_token(token: str) -> TokenData:
     )
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
 
         if user_id is None:
