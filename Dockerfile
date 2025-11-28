@@ -20,9 +20,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Download and cache ML models to reduce startup time
-RUN python -c "import spacy; spacy.cli.download('en_core_web_sm')" && \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" && \
-    python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('gpt2'); AutoModelForCausalLM.from_pretrained('gpt2')"
+# Use || to continue build even if model downloads fail (models can be downloaded at runtime)
+RUN python -c "import spacy; spacy.cli.download('en_core_web_sm')" || echo 'WARNING: spacy model download failed - will retry at runtime'
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" || echo 'WARNING: sentence-transformers model download failed - will retry at runtime'
+RUN python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('gpt2'); AutoModelForCausalLM.from_pretrained('gpt2')" || echo 'WARNING: transformers model download failed - will retry at runtime'
 
 # Copy application code
 COPY . .

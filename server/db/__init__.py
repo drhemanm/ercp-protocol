@@ -3,7 +3,7 @@ Database package for ERCP Protocol.
 Provides database models, session management, and repositories.
 """
 
-from .database import Base, engine, AsyncSessionLocal, get_db, init_db, drop_db
+from .database import Base, engine, AsyncSessionLocal, get_db, get_db_with_commit, init_db, drop_db
 from .models import Trace, TraceEvent, Constraint, Error, ModelCache
 
 __all__ = [
@@ -11,6 +11,7 @@ __all__ = [
     "engine",
     "AsyncSessionLocal",
     "get_db",
+    "get_db_with_commit",
     "init_db",
     "drop_db",
     "Trace",

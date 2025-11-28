@@ -175,43 +175,56 @@ class ModelRegistry:
                     self._last_used[cache_key] = time.time()
                     return self._models[cache_key]
 
-        # Acquire lock for loading
+        # Acquire lock to check/set loading state
+        should_load = False
+        loading_event = None
+
         with self._lock:
-            # Double-check - might have been loaded while waiting
+            # Double-check - might have been loaded while waiting for lock
             if cache_key in self._models:
                 self._last_used[cache_key] = time.time()
                 return self._models[cache_key]
 
-            # Check if another thread is loading
+            # Check if another thread is already loading this model
             if cache_key in self._loading:
+                # Another thread is loading - get the event to wait on
                 loading_event = self._loading[cache_key]
             else:
-                # We'll load it
+                # We'll load it - create event and register as loader
                 loading_event = threading.Event()
                 self._loading[cache_key] = loading_event
+                should_load = True
 
-        # If we're not the loading thread, wait
-        if not loading_event.is_set() and self._loading.get(cache_key) is loading_event:
-            # Another thread is loading, wait for it
-            pass
-        else:
-            # We need to check if we should wait
-            other_event = self._loading.get(cache_key)
-            if other_event and other_event is not loading_event:
-                print(f"Waiting for {cache_key} to load...")
-                other_event.wait(timeout=300)  # 5 minute timeout
-                
+        # If another thread is loading, wait for it
+        if not should_load:
+            print(f"Waiting for {cache_key} to be loaded by another thread...")
+            loading_event.wait(timeout=300)  # 5 minute timeout
+
+            # Check if loading succeeded
+            with self._lock:
                 if cache_key in self._models:
-                    with self._lock:
-                        self._last_used[cache_key] = time.time()
-                        return self._models[cache_key]
-                # Fall through to load ourselves if wait failed
+                    self._last_used[cache_key] = time.time()
+                    return self._models[cache_key]
+
+            # Loading failed or timed out - try to load ourselves
+            with self._lock:
+                if cache_key not in self._models and cache_key not in self._loading:
+                    loading_event = threading.Event()
+                    self._loading[cache_key] = loading_event
+                    should_load = True
+                elif cache_key in self._models:
+                    self._last_used[cache_key] = time.time()
+                    return self._models[cache_key]
+
+            if not should_load:
+                raise RuntimeError(f"Failed to load model {cache_key} after waiting")
 
         # We're the loading thread
         try:
             self._ensure_memory_available(estimated_size_gb=estimated_size_gb)
-            
+
             # Load model (outside lock for better concurrency)
+            print(f"Loading model: {cache_key}")
             model = loader_func()
 
             # Cache result
@@ -226,7 +239,7 @@ class ModelRegistry:
             return model
 
         finally:
-            # Signal completion
+            # Signal completion and cleanup
             with self._lock:
                 if cache_key in self._loading:
                     self._loading[cache_key].set()

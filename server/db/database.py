@@ -176,23 +176,53 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency for getting async database sessions with timeout protection.
+    Dependency for read-only operations or manual commit control.
 
     Usage in FastAPI:
         @app.get("/endpoint")
         async def endpoint(db: AsyncSession = Depends(get_db)):
-            # Use db session
-    
+            # Use db session - caller handles commit if needed
+
+    Features:
+    - No auto-commit (caller controls transaction)
+    - Automatic rollback on error
+    - Connection cleanup
+    - Timeout protection at multiple levels
+
+    Use get_db_with_commit() for write operations that need auto-commit.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # No auto-commit - let the caller handle it
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def get_db_with_commit() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency for write operations with auto-commit.
+
+    Usage in FastAPI:
+        @app.post("/endpoint")
+        async def endpoint(db: AsyncSession = Depends(get_db_with_commit)):
+            # Use db session - auto-commits on success
+
     Features:
     - Automatic commit on success
     - Automatic rollback on error
     - Connection cleanup
     - Timeout protection at multiple levels
+
+    Use get_db() for read-only operations or when manual commit control is needed.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
+            await session.commit()  # Auto-commit on success
         except Exception:
             await session.rollback()
             raise
