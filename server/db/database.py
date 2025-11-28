@@ -1,6 +1,8 @@
 """
 Database configuration and session management for ERCP Protocol.
 Uses SQLAlchemy with async support and comprehensive timeout protection.
+
+CORRECTED VERSION - Includes both get_db() and get_db_with_commit()
 """
 
 import os
@@ -171,17 +173,55 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 # ============================================
-# Session Dependency with Timeout Protection
+# Session Dependencies with Timeout Protection
 # ============================================
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency for getting async database sessions with timeout protection.
+    Dependency for getting async database sessions (NO auto-commit).
+    
+    Use this for:
+    - Read-only operations (SELECT queries)
+    - Operations where you want manual commit control
+    - Transactions spanning multiple operations
 
     Usage in FastAPI:
         @app.get("/endpoint")
         async def endpoint(db: AsyncSession = Depends(get_db)):
-            # Use db session
+            result = await db.execute(select(Model))
+            # No auto-commit - session closed without commit
+    
+    Features:
+    - NO automatic commit (caller controls when to commit)
+    - Automatic rollback on error
+    - Connection cleanup
+    - Timeout protection at multiple levels
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # No auto-commit - let caller decide when to commit
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def get_db_with_commit() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency for getting async database sessions WITH auto-commit.
+    
+    Use this for:
+    - Write operations (INSERT, UPDATE, DELETE)
+    - Operations that should commit immediately on success
+    - Single-operation transactions
+
+    Usage in FastAPI:
+        @app.post("/endpoint")
+        async def endpoint(db: AsyncSession = Depends(get_db_with_commit)):
+            db.add(new_record)
+            # Auto-commits on success, rolls back on error
     
     Features:
     - Automatic commit on success
@@ -192,7 +232,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
+            await session.commit()  # Auto-commit on success
         except Exception:
             await session.rollback()
             raise
