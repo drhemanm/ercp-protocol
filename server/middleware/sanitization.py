@@ -70,10 +70,14 @@ class SanitizationMiddleware(BaseHTTPMiddleware):
         # SQL injection
         r"(?i)'[\s\._-]*(?:or|and)[\s\._-]*'?\d*[\s\._-]*'?[\s\._-]*=[\s\._-]*'?\d*",
         r"(?i);[\s\._-]*drop[\s\._-]*(?:table|database)",
+        r"(?i);[\s\._-]*delete[\s\._-]*from",  # DELETE injection
         r"(?i)union[\s\._-]*(?:all[\s\._-]*)?select",
         r"(?i)insert[\s\._-]*into[\s\._-]*\w+[\s\._-]*values",
-        # SQL comment injection - must follow a quote or semicolon to reduce false positives
-        r"(?i)[';\)]\s*--\s*(?:$|[^\w])",
+        # SQL comment injection patterns:
+        # 1. Comment after SQL context (quote, semicolon, paren)
+        r"(?i)[';\)]\s*--",
+        # 2. Comment at end of string (truncation attack)
+        r"--\s*$",
 
         # Command injection
         r"(?i)[;&|`$]\s*(?:ls|cat|pwd|whoami|id|uname)",
