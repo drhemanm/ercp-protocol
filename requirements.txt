@@ -34,7 +34,7 @@ python-multipart==0.0.6
 
 # Rate Limiting & Middleware
 slowapi==0.1.9
-python-limits==3.6.0
+limits==3.6.0
 
 # Logging & Monitoring
 structlog==23.2.0
