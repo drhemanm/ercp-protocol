@@ -10,9 +10,9 @@ Version: 2.0 (Production)
 import time
 import uuid
 import os
+import contextvars  # ADD THIS LINE
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
-import contextvars
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
